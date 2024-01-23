@@ -1,8 +1,8 @@
 from time import time
 
 from bot import LOGGER, jd_lock, jd_downloads
-from bot.helper.ext_utils.jdownloader_booter import jdownloader
 from bot.helper.ext_utils.bot_utils import retry_function
+from bot.helper.ext_utils.jdownloader_booter import jdownloader
 from bot.helper.ext_utils.status_utils import (
     MirrorStatus,
     get_readable_file_size,
@@ -15,12 +15,15 @@ def _get_combined_info(result, start_time):
     hosts = result[0].get("hosts")
     bytesLoaded = 0
     bytesTotal = 0
+    status = ""
     for res in result:
         st = res.get("status", "").lower()
         if st and st != "finished":
             status = st
         bytesLoaded += res.get("bytesLoaded", 0)
         bytesTotal += res.get("bytesTotal", 0)
+    if not status:
+        status = "UnknownError"
     try:
         speed = bytesLoaded / (time() - start_time)
         eta = (bytesTotal - bytesLoaded) / speed

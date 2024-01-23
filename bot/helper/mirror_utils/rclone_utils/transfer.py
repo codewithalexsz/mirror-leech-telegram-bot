@@ -1,17 +1,16 @@
+from aiofiles import open as aiopen
+from aiofiles.os import path as aiopath, makedirs, listdir
 from asyncio import create_subprocess_exec, gather
 from asyncio.subprocess import PIPE
-from re import findall as re_findall
-from json import loads
-from aiofiles.os import path as aiopath, makedirs, listdir
-from aiofiles import open as aiopen
 from configparser import ConfigParser
-from random import randrange
+from json import loads
 from logging import getLogger
+from random import randrange
+from re import findall as re_findall
 
 from bot import config_dict
 from bot.helper.ext_utils.bot_utils import cmd_exec, sync_to_async
 from bot.helper.ext_utils.files_utils import get_mime_type, count_files_and_folders
-
 
 LOGGER = getLogger(__name__)
 
@@ -265,12 +264,12 @@ class RcloneTransferHelper:
         else:
             return True
 
-    async def upload(self, path, size):
+    async def upload(self, path, unwanted_files):
         self._is_upload = True
         rc_path = self._listener.upDest.strip("/")
         if rc_path.startswith("mrcc:"):
             rc_path = rc_path.split("mrcc:", 1)[1]
-            oconfig_path = f"rclone/{self._listener.user_id}.conf"
+            oconfig_path = f"rclone/{self._listener.userId}.conf"
         else:
             oconfig_path = "rclone.conf"
 
@@ -279,11 +278,11 @@ class RcloneTransferHelper:
         if await aiopath.isdir(path):
             mime_type = "Folder"
             folders, files = await count_files_and_folders(
-                path, self._listener.extension_filter
+                path, self._listener.extensionFilter
             )
             rc_path += f"/{self._listener.name}" if rc_path else self._listener.name
         else:
-            if path.lower().endswith(tuple(self._listener.extension_filter)):
+            if path.lower().endswith(tuple(self._listener.extensionFilter)):
                 await self._listener.onUploadError(
                     "This file extension is excluded by extension filter!"
                 )
@@ -318,7 +317,7 @@ class RcloneTransferHelper:
 
         method = "move" if not self._listener.seed or self._listener.newDir else "copy"
         cmd = self._getUpdatedCommand(
-            fconfig_path, path, f"{fremote}:{rc_path}", method
+            fconfig_path, path, f"{fremote}:{rc_path}", method, unwanted_files
         )
         if (
             remote_type == "drive"
@@ -355,10 +354,10 @@ class RcloneTransferHelper:
             return
         LOGGER.info(f"Upload Done. Path: {destination}")
         await self._listener.onUploadComplete(
-            link, size, files, folders, mime_type, destination
+            link, files, folders, mime_type, destination
         )
 
-    async def clone(self, config_path, src_remote, src_path, mime_type):
+    async def clone(self, config_path, src_remote, src_path, mime_type, method):
         destination = self._listener.upDest
         dst_remote, dst_path = destination.split(":", 1)
 
@@ -377,7 +376,7 @@ class RcloneTransferHelper:
         )
 
         cmd = self._getUpdatedCommand(
-            config_path, f"{src_remote}:{src_path}", destination, "copy"
+            config_path, f"{src_remote}:{src_path}", destination, method
         )
         if not self._listener.rcFlags and not config_dict["RCLONE_FLAGS"]:
             if src_remote_type == "drive" and dst_remote_type != "drive":
@@ -424,8 +423,10 @@ class RcloneTransferHelper:
                     )
                     return None, destination
 
-    def _getUpdatedCommand(self, config_path, source, destination, method):
-        ext = "*.{" + ",".join(self._listener.extension_filter) + "}"
+    def _getUpdatedCommand(
+        self, config_path, source, destination, method, unwanted_files=[]
+    ):
+        ext = "*.{" + ",".join(self._listener.extensionFilter) + "}"
         cmd = [
             "rclone",
             method,
@@ -456,6 +457,9 @@ class RcloneTransferHelper:
                     cmd.extend((key, value))
                 elif len(flag) > 0:
                     cmd.append(flag.strip())
+        if unwanted_files:
+            for f in unwanted_files:
+                cmd.extend(("--exclude", f))
         return cmd
 
     @staticmethod
